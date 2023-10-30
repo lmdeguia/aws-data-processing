@@ -1,0 +1,247 @@
+{
+    "Parameters": {
+        "AccountID": {
+            "Default": "955304207641",
+            "Description": "AWS Account ID",
+            "Type": "String"
+        },
+        "FunctionName": {
+            "Default": "project_dynamodb_lambda",
+            "Description": "Lambda Function Name",
+            "Type": "String"
+        },
+        "Account": {
+            "Default": "kubex-aws",
+            "Description": "AWS Account",
+            "Type": "String"
+        },
+        "Region": {
+            "Default": "us-east-2",
+            "Description": "AWS Region",
+            "Type": "String"
+        }
+    },
+    "Resources": {
+        "MyDynamoDBTable": {
+            "Type": "AWS::DynamoDB::Table",
+            "Properties": {
+                "AttributeDefinitions": [
+                    {
+                        "AttributeName": "Id",
+                        "AttributeType": "S"
+                    },
+                    {
+                        "AttributeName": "Name",
+                        "AttributeType": "S"
+                    }
+                ],
+                "BillingMode": "PROVISIONED",
+                "ContributorInsightsSpecification": {
+                    "Enabled": true
+                },
+                "KeySchema": [
+                    {
+                        "AttributeName": "Id",
+                        "KeyType": "HASH"
+                    },
+                    {
+                        "AttributeName": "Name",
+                        "KeyType": "RANGE"
+                    }
+                ],
+                "PointInTimeRecoverySpecification": {
+                    "PointInTimeRecoveryEnabled": true
+                },
+                "ProvisionedThroughput": {
+                    "ReadCapacityUnits": 10,
+                    "WriteCapacityUnits": 10
+                },
+                "StreamSpecification": {
+                    "StreamViewType": "NEW_AND_OLD_IMAGES"
+                },
+                "TableClass": "STANDARD",
+                "TableName": "Student",
+                "Tags": [
+                    {
+                        "Key": "Developer",
+                        "Value": "Jake"
+                    },
+                    {
+                        "Key": "Department",
+                        "Value": "DataEngineering"
+                    },
+                    {
+                        "Key": "Owner",
+                        "Value": "Apple"
+                    },
+                    {
+                        "Key": "Appliacation",
+                        "Value": "Schema Change Detection"
+                    },
+                    {
+                        "Key": "SupportEmail",
+                        "Value": "xxx@gmail.com"
+                    },
+                    {
+                        "Key": "Version",
+                        "Value": 1.0
+                    }
+                ]
+            }
+        },
+        "DynamoDBEventSourceMapping": {
+            "Type": "AWS::Lambda::EventSourceMapping",
+            "DependsOn": [
+                "MyDynamoDBTable",
+                "DynmoDBLambda"
+            ],
+            "Properties": {
+                "BatchSize": 150,
+                "Enabled": true,
+                "EventSourceArn": {
+                    "Fn::GetAtt": [
+                        "MyDynamoDBTable",
+                        "StreamArn"
+                    ]
+                },
+                "FunctionName": {
+                    "Fn::GetAtt": [
+                        "DynmoDBLambda",
+                        "Arn"
+                    ]
+                },
+                "MaximumBatchingWindowInSeconds": 5,
+                "ParallelizationFactor": 10,
+                "StartingPosition": "LATEST",
+                "FilterCriteria": {
+                    "Filters": [
+                        {
+                            "Pattern": "{ \"eventName\": [\"MODIFY\"]}"
+                        },
+                        {
+                            "Pattern": "{ \"eventName\": [\"REMOVE\"]}"
+                        }
+                    ]
+                }
+            }
+        },
+        "DynmoDBLambda": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Architectures": [
+                    "x86_64"
+                ],
+                "Code": {
+                    "S3Bucket": "trainingqwer",
+                    "S3Key": "Lambda/files/dynamodb_lambda.zip"
+                },
+                "Description": "Dynamodb lambda using CFT",
+                "EphemeralStorage": {
+                    "Size": 1024
+                },
+                "FunctionName": {
+                    "Ref": "FunctionName"
+                },
+                "Handler": "dynamodb_lambda.lambda_handler",
+                "MemorySize": 128,
+                "PackageType": "Zip",
+                "Role": {
+                    "Fn::GetAtt": [
+                        "LambdaRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "python3.10",
+                "Tags": [
+                    {
+                        "Key": "Developer",
+                        "Value": "Mike"
+                    },
+                    {
+                        "Key": "SupportEmail",
+                        "Value": "xxxx@gamil.com"
+                    }
+                ],
+                "Timeout": 60
+            }
+        },
+        "LambdaRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "lambda.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "Path": "/",
+                "Policies": [
+                    {
+                        "PolicyName": "DynamoDBAccess",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Sid": "LogAccess",
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "logs:*"
+                                    ],
+                                    "Resource": "arn:aws:logs:*:*:*"
+                                },
+                                {
+                                    "Sid": "SESAccess",
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "ses:*"
+                                    ],
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Sid": "DynamoDBAccess",
+                                    "Action": [
+                                        "dynamodb:GetRecords",  
+                                        "dynamodb:GetShardIterator",
+                                        "dynamodb:DescribeStream",
+                                        "dynamodb:ListStreams"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": {
+                                        "Fn::GetAtt": [
+                                            "MyDynamoDBTable",
+                                            "StreamArn"
+                                        ]
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "RoleName": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            {
+                                "Ref": "Account"
+                            },
+                            {
+                                "Ref": "AWS::Region"
+                            },
+                            "DynamoDB-Lambda-Role"
+                        ]
+                    ]
+                }
+            }
+        }
+    }
+}
