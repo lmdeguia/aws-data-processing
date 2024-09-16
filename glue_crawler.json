@@ -1,0 +1,247 @@
+{
+    "Conditions": {
+        "hasClassifier": {
+            "Fn::Not": [
+                {
+                    "Fn::Equals": [
+                        {
+                            "Ref": "MyClassifier"
+                        },
+                        ""
+                    ]
+                }
+            ]
+        }
+    },
+    "Parameters": {
+        "AccountID": {
+            "Default": "955304207641",
+            "Description": "AWS Account ID",
+            "Type": "String"
+        },
+        "Account": {
+            "Default": "kubex-aws",
+            "Description": "AWS Account",
+            "Type": "String"
+        },
+        "Region": {
+            "Default": "us-east-2",
+            "Description": "AWS Region",
+            "Type": "String"
+        },
+        "hasClassifier": {
+            "Default": "",
+            "Description": "Custom String",
+            "Type": "String"
+        },
+        "MyClassifier": {
+            "Default": "",
+            "Description": "Classifier",
+            "Type": "String"
+        },
+        "CronExpression": {
+            "Default": "cron(0 10 * * ? *)",
+            "Description": "crawler running cronExpression",
+            "Type": "String"
+        },
+        "CrawlerBucketName": {
+            "Default": "us-east-2-crawler-test-bucket",
+            "Description": "crawler bucket name",
+            "Type": "String"
+        },
+        "S3KmsKeyArn": {
+            "Default": "arn:aws:kms:us-east-2:955304207641:key/mrk-eb81387515f344dd839945ca063c8577",
+            "Description": "KmsKey to encrypt and decrypt objects in the raw bucket",
+            "Type": "String"
+        }
+    },
+    "Resources": {
+        "Database": {
+            "Type": "AWS::Glue::Database",
+            "Properties": {
+                "CatalogId": {
+                    "Ref": "AWS::AccountId"
+                },
+                "DatabaseInput": {
+                    "Description": "Database for crawler",
+                    "Name": "crawler-test"
+                }
+            }
+        },
+        "GlueRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "glue.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "Path": "/",
+                "Policies": [
+                    {
+                        "PolicyName": "BucketAccess",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Sid": "LogAccess",
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "logs:*"
+                                    ],
+                                    "Resource": "arn:aws:logs:*:*:*"
+                                },
+                                {
+                                    "Sid": "CloudwatchAccessPolicy",
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "cloudwatch:Get*",
+                                        "cloudwatch:Put*",
+                                        "cloudwatch:Describe*"
+                                    ],
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Sid": "ReadAccess",
+                                    "Action": [
+                                        "s3:GetObject",
+                                        "s3:GetObjectVersion",
+                                        "s3:List*"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        {
+                                            "Fn::Join": [
+                                                "",
+                                                [
+                                                    "arn:aws:s3:::",
+                                                    {
+                                                        "Ref": "CrawlerBucketName"
+                                                    }
+                                                ]
+                                            ]
+                                        },
+                                        {
+                                            "Fn::Join": [
+                                                "",
+                                                [
+                                                    "arn:aws:s3:::",
+                                                    {
+                                                        "Ref": "CrawlerBucketName"
+                                                    },
+                                                    "/*"
+                                                ]
+                                            ]
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Sid": "GlueAccess",
+                                    "Action": [
+                                        "glue:*"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "kms:List*",
+                                        "kms:Decrypt",
+                                        "kms:GenerateDataKey*",
+                                        "kms:DescribeKey"
+                                    ],
+                                    "Resource": {
+                                        "Ref": "S3KmsKeyArn"
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "RoleName": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            {
+                                "Ref": "Account"
+                            },
+                            {
+                                "Ref": "AWS::Region"
+                            },
+                            "Crwaler-Test-Glue-Role"
+                        ]
+                    ]
+                }
+            }
+        },
+        "Crawler": {
+            "Type": "AWS::Glue::Crawler",
+            "Properties": {
+                "Classifiers": {
+                    "Fn::If": [
+                        "hasClassifier",
+                        {
+                            "Ref": "MyClassifier"
+                        },
+                        {
+                            "Ref": "AWS::NoValue"
+                        }
+                    ]
+                },
+                "Configuration": "{\"Version\":1.0,\"CrawlerOutput\":{\"Partitions\":{\"AddOrUpdateBehavior\":\"InheritFromTable\"}},\"Grouping\": {\"TableLevelConfiguration\": 6}}",
+                "DatabaseName": {
+                    "Ref": "Database"
+                },
+                "Description": "aws training Glue Crawler",
+                "Name": "GlueTestCrawler",
+                "RecrawlPolicy": {
+                    "RecrawlBehavior": "CRAWL_EVERYTHING"
+                },
+                "Role": {
+                    "Ref": "GlueRole"
+                },
+                "Schedule": {
+                    "ScheduleExpression": {
+                        "Ref": "CronExpression"
+                    }
+                },
+                "SchemaChangePolicy": {
+                    "DeleteBehavior": "LOG",
+                    "UpdateBehavior": "UPDATE_IN_DATABASE"
+                },
+                "Tags": {
+                    "Developer": "Jake",
+                    "SupportEmail": "ssss@gamil.com"
+                },
+                "Targets": {
+                    "S3Targets": [
+                        {
+                            "Path": {
+                                "Fn::Sub": "${CrawlerBucketName}"
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    },
+    "Outputs": {
+        "Crawler": {
+            "Value": {
+                "Ref": "Crawler"
+            }
+        }
+    }
+}

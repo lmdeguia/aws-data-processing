@@ -1,0 +1,467 @@
+{
+    "Parameters": {
+        "AccountId": {
+            "Default": "955304207641",
+            "Description": "AWS Account ID",
+            "Type": "String"
+        },
+        "Account": {
+            "Default": "kubex-aws",
+            "Description": "AWS Account",
+            "Type": "String"
+        },
+        "FunctionName": {
+            "Default": "CrossRegion_Send_Email_Lambda",
+            "Description": "Lambda Function Name",
+            "Type": "String"
+        },
+        "SQSName": {
+            "Default": "CrossRegionSQS",
+            "Description": "SQS Queue Name",
+            "Type": "String"
+        },
+        "SNSName": {
+            "Default": "CrossRegion-Schema-Change-Detection-Topic",
+            "Description": "SNS Topic Name",
+            "Type": "String"
+        },
+        "SendEmailSNSName": {
+            "Default": "CrossRegion-Send-Email-Topic",
+            "Description": "SNS Topic Name",
+            "Type": "String"
+        }
+    },
+    "Resources": {
+        "SendEmailSNS": {
+            "Type": "AWS::SNS::Topic",
+            "Properties": {
+                "DisplayName": "Send Email Topic",
+                "Subscription": [
+                    {
+                        "Endpoint": "123456789",
+                        "Protocol": "sms"
+                    },
+                    {
+                        "Endpoint": "cactustechllc@gmail.com",
+                        "Protocol": "email"
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Developer",
+                        "Value": "Jake"
+                    },
+                    {
+                        "Key": "Department",
+                        "Value": "Engineering"
+                    }
+                ],
+                "TopicName": {
+                    "Ref": "SendEmailSNSName"
+                }
+            }
+        },
+        "SendEmailSNSPolicy": {
+            "Type": "AWS::SNS::TopicPolicy",
+            "Properties": {
+                "PolicyDocument": {
+                    "Statement": [
+                        {
+                            "Sid": "AccountAccess",
+                            "Effect": "Allow",
+                            "Principal": {
+                                "AWS": "*"
+                            },
+                            "Action": [
+                                "SNS:GetTopicAttributes",
+                                "SNS:SetTopicAttributes",
+                                "SNS:AddPermission",
+                                "SNS:RemovePermission",
+                                "SNS:DeleteTopic",
+                                "SNS:Subscribe",
+                                "SNS:ListSubscriptionsByTopic",
+                                "SNS:Publish"
+                            ],
+                            "Resource": [
+                                {
+                                    "Ref": "SendEmailSNS"
+                                }
+                            ],
+                            "Condition": {
+                                "StringEquals": {
+                                    "AWS:SourceOwner": "955304207641"
+                                }
+                            }
+                        },
+                        {
+                            "Action": [
+                                "sns:Publish"
+                            ],
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "lambda.amazonaws.com"
+                            },
+                            "Resource": [
+                                {
+                                    "Ref": "SendEmailSNS"
+                                }
+                            ],
+                            "Sid": "LambdaAccess"
+                        }
+                    ],
+                    "Version": "2012-10-17"
+                },
+                "Topics": [
+                    {
+                        "Ref": "SendEmailSNS"
+                    }
+                ]
+            }
+        },
+        "CrossRegionSNS": {
+            "Type": "AWS::SNS::Topic",
+            "Properties": {
+                "DisplayName": "Receive Event Topic",
+                "Subscription": [
+                    {
+                        "Endpoint": "123456789",
+                        "Protocol": "sms"
+                    },
+                    {
+                        "Endpoint": "qqqqq@gmail.com",
+                        "Protocol": "email"
+                    },
+                    {
+                        "Endpoint": {
+                            "Fn::Sub": "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:${SQSName}"
+                        },
+                        "Protocol": "sqs"
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Developer",
+                        "Value": "Jake"
+                    },
+                    {
+                        "Key": "Department",
+                        "Value": "Engineering"
+                    }
+                ],
+                "TopicName": {
+                    "Ref": "SNSName"
+                }
+            }
+        },
+        "CrossRegionSNSPolicy": {
+            "Type": "AWS::SNS::TopicPolicy",
+            "Properties": {
+                "PolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": [
+                                "sns:AddPermission",
+                                "sns:DeleteTopic",
+                                "sns:GetTopicAttributes",
+                                "sns:ListSubscriptionsByTopic",
+                                "sns:Publish",
+                                "sns:SetTopicAttributes",
+                                "sns:Subscribe",
+                                "sns:Receive",
+                                "sns:RemovePermission"
+                            ],
+                            "Condition": {
+                                "StringEquals": {
+                                    "AWS:SourceOwner": {
+                                        "Ref": "AWS::AccountId"
+                                    }
+                                }
+                            },
+                            "Effect": "Allow",
+                            "Principal": {
+                                "AWS": "*"
+                            },
+                            "Resource": [
+                                {
+                                    "Ref": "CrossRegionSNS"
+                                }
+                            ],
+                            "Sid": "SNSPolicy"
+                        },
+                        {
+                            "Action": [
+                                "sns:Publish"
+                            ],
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "events.amazonaws.com"
+                            },
+                            "Resource": [
+                                {
+                                    "Ref": "CrossRegionSNS"
+                                }
+                            ],
+                            "Sid": "EventAccess"
+                        }
+                    ],
+                    "Version": "2012-10-17"
+                },
+                "Topics": [
+                    {
+                        "Ref": "CrossRegionSNS"
+                    }
+                ]
+            }
+        },
+        "CrossRegionSQS": {
+            "Type": "AWS::SQS::Queue",
+            "Properties": {
+                "QueueName": {
+                    "Ref": "SQSName"
+                },
+                "Tags": [
+                    {
+                        "Key": "Developer",
+                        "Value": "Mike"
+                    },
+                    {
+                        "Key": "Department",
+                        "Value": "Engineering"
+                    }
+                ],
+                "VisibilityTimeout": 720
+            }
+        },
+        "CrossRegionQueuePolicy": {
+            "Type": "AWS::SQS::QueuePolicy",
+            "Properties": {
+                "PolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": [
+                                "sqs:*"
+                            ],
+                            "Effect": "Allow",
+                            "Principal": {
+                                "AWS": {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:iam::",
+                                            {
+                                                "Ref": "AWS::AccountId"
+                                            },
+                                            ":root"
+                                        ]
+                                    ]
+                                }
+                            },
+                            "Resource": {
+                                "Fn::GetAtt": [
+                                    "CrossRegionSQS",
+                                    "Arn"
+                                ]
+                            },
+                            "Sid": "RootAccountAccess"
+                        },
+                        {
+                            "Action": [
+                                "sqs:SendMessage"
+                            ],
+                            "Condition": {
+                                "ArnLike": {
+                                    "aws:SourceArn": {
+                                        "Fn::Sub": "arn:aws:sns:${AWS::Region}:${AWS::AccountId}:${SNSName}"
+                                    }
+                                }
+                            },
+                            "Effect": "Allow",
+                            "Principal": {
+                                "AWS": "*"
+                            },
+                            "Resource": {
+                                "Fn::GetAtt": [
+                                    "CrossRegionSQS",
+                                    "Arn"
+                                ]
+                            },
+                            "Sid": "Topic-subscription"
+                        }
+                    ],
+                    "Version": "2012-10-17"
+                },
+                "Queues": [
+                    {
+                        "Ref": "CrossRegionSQS"
+                    }
+                ]
+            }
+        },
+        "SendEmailLambda": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Architectures": [
+                    "x86_64"
+                ],
+                "Code": {
+                    "S3Bucket": "us-east-1-aws-training-bucket",
+                    "S3Key": "Lambda/files/email_lambda.zip"
+                },
+                "Description": "Email lambda using CFT",
+                "EphemeralStorage": {
+                    "Size": 1024
+                },
+                "FunctionName": {
+                    "Ref": "FunctionName"
+                },
+                "Handler": "send_email_lambda.lambda_handler",
+                "MemorySize": 128,
+                "PackageType": "Zip",
+                "Role": {
+                    "Fn::GetAtt": [
+                        "SendEmailLambdaRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "python3.10",
+                "Tags": [
+                    {
+                        "Key": "Developer",
+                        "Value": "Jake"
+                    },
+                    {
+                        "Key": "SupportEmail",
+                        "Value": "aaaa@gamil.com"
+                    }
+                ],
+                "Timeout": 120
+            }
+        },
+        "SendEmailLambdaRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "lambda.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "Path": "/",
+                "Policies": [
+                    {
+                        "PolicyName": "EmailLambdaAccess",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Sid": "LogAccess",
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "logs:*"
+                                    ],
+                                    "Resource": "arn:aws:logs:*:*:*"
+                                },
+                                {
+                                    "Sid": "SQSAccess",
+                                    "Action": [
+                                        "sqs:DeleteMessage",
+                                        "sqs:GetQueueUrl",
+                                        "sqs:ChangeMessageVisibility",
+                                        "sqs:ReceiveMessage",
+                                        "sqs:GetQueueAttributes"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": {
+                                        "Fn::GetAtt": [
+                                            "CrossRegionSQS",
+                                            "Arn"
+                                        ]
+                                    }
+                                },
+                                {
+                                    "Sid": "SNSPermission",
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "sns:Publish"
+                                    ],
+                                    "Resource": {
+                                        "Ref": "SendEmailSNS"
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "RoleName": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            {
+                                "Ref": "Account"
+                            },
+                            {
+                                "Ref": "AWS::Region"
+                            },
+                            "CrossRegion-Email-Lambda-Role"
+                        ]
+                    ]
+                }
+            }
+        },
+        "SQSEventSourceMapping": {
+            "Type": "AWS::Lambda::EventSourceMapping",
+            "DependsOn": [
+                "CrossRegionSQS",
+                "SendEmailLambda"
+            ],
+            "Properties": {
+                "Enabled": true,
+                "EventSourceArn": {
+                    "Fn::GetAtt": [
+                        "CrossRegionSQS",
+                        "Arn"
+                    ]
+                },
+                "FunctionName": {
+                    "Fn::GetAtt": [
+                        "SendEmailLambda",
+                        "Arn"
+                    ]
+                }
+            }
+        }
+    },
+    "Outputs": {
+        "SendEmailSNS": {
+            "Description": "Send Email Topic",
+            "Value": {
+                "Ref": "SendEmailSNS"
+            }
+        },
+        "CrossRegionSNS": {
+            "Description": "Schema Change Detection Topic",
+            "Value": {
+                "Ref": "CrossRegionSNS"
+            }
+        },
+        "CrossRegionSQS": {
+            "Description": "CrossRegion SQS",
+            "Value": {
+                "Fn::GetAtt": [
+                    "CrossRegionSQS",
+                    "QueueName"
+                ]
+            }
+        }
+    }
+}
